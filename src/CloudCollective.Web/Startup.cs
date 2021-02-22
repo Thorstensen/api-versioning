@@ -38,7 +38,8 @@ namespace CloudCollective.Web
                     new HeaderApiVersionReader("version"),
                     new MediaTypeApiVersionReader("version"),
                     new UrlSegmentApiVersionReader()
-                ) ;
+                );
+                cfg.ReportApiVersions = true;
             });
 
             services.AddVersionedApiExplorer(cfg =>
