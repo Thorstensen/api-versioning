@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ApiExplorer;
+using Microsoft.AspNetCore.Mvc.Versioning;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -26,7 +28,40 @@ namespace CloudCollective.Web
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddControllers();
-            services.AddApiVersioning();
+            services.AddApiVersioning(cfg =>
+            {
+                cfg.DefaultApiVersion = new ApiVersion(1, 0);
+                cfg.AssumeDefaultVersionWhenUnspecified = true;
+                cfg.ApiVersionReader = ApiVersionReader.Combine
+                (
+                    new QueryStringApiVersionReader("version"),
+                    new HeaderApiVersionReader("version"),
+                    new MediaTypeApiVersionReader("version"),
+                    new UrlSegmentApiVersionReader()
+                ) ;
+            });
+
+            services.AddVersionedApiExplorer(cfg =>
+            {
+                cfg.GroupNameFormat = "'v'VVV";
+
+                //If you use the UrlSegmentApiVersionReader set this to true.
+                cfg.SubstituteApiVersionInUrl = true;
+            });
+
+            services.AddSwaggerGen(cfg =>
+            {
+                var provider = services.BuildServiceProvider();
+                var service = provider.GetRequiredService<IApiVersionDescriptionProvider>();
+                service.ApiVersionDescriptions.ToList().ForEach(apiVersionDescription =>
+                {
+                    cfg.SwaggerDoc(apiVersionDescription.GroupName, new OpenApiInfo
+                    {
+                        Title = "Cloud Collective APIs",
+                        Version = apiVersionDescription.ApiVersion.ToString()
+                    });
+                });
+            });
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -34,9 +69,16 @@ namespace CloudCollective.Web
         {
             if (env.IsDevelopment())
             {
+                var apiVersionDescriptionProvider = app.ApplicationServices.GetRequiredService<IApiVersionDescriptionProvider>();
                 app.UseDeveloperExceptionPage();
                 app.UseSwagger();
-                app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "CloudCollective.Web v1"));
+                app.UseSwaggerUI(cfg =>
+                {
+                    apiVersionDescriptionProvider.ApiVersionDescriptions.ToList().ForEach(description =>
+                    {
+                        cfg.SwaggerEndpoint($"/swagger/{description.GroupName}/swagger.json", description.GroupName);
+                    });
+                });
             }
 
             app.UseHttpsRedirection();
